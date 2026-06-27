@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  raven:
+    build: .
+    image: raven:latest
+    entrypoint: ["raven"]
+    command: ["--serve", "--host", "0.0.0.0"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - raven_data:/root/.local/share/raven
+    restart: unless-stopped
+
+volumes:
+  raven_data:
