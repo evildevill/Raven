@@ -82,8 +82,34 @@ cargo build --release
 ### Docker
 
 ```bash
+# Pull from Docker Hub
+docker pull hackerwasii/raven
+
+# Search a single username
+docker run --rm hackerwasii/raven johndoe
+
+# Start the web UI
+docker run --rm -p 8080:8080 hackerwasii/raven --serve --host 0.0.0.0
+
+# Build locally
 docker build -t raven .
-docker run --rm raven johndoe
+```
+
+### Docker Compose
+
+```yaml
+services:
+  raven:
+    image: hackerwasii/raven:latest
+    command: ["--serve", "--host", "0.0.0.0"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - raven_data:/root/.local/share/raven
+    restart: unless-stopped
+
+volumes:
+  raven_data:
 ```
 
 ### Pre-built Binary
@@ -480,7 +506,7 @@ Raven is available for multiple platforms. Package maintainers, please update th
 | **Kali Linux** | Kali Rolling | `apt install raven` | ⏳ Planned |
 | **Homebrew** | Homebrew Core | `brew install raven` | ⏳ Planned |
 | **Arch Linux** | AUR | `yay -S raven` | ⏳ Planned |
-| **Docker** | Docker Hub | `docker run raven` | ⏳ Planned |
+| **Docker** | [Docker Hub](https://hub.docker.com/r/hackerwasii/raven) | `docker pull hackerwasii/raven` | ✅ Published |
 | **Apify** | Apify Store | — | ✅ Configured |
 
 ### Adding a New Platform
