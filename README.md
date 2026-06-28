@@ -29,9 +29,7 @@ Modern Rust OSINT for Username Reconnaissance
 
 ## Table of Contents
 
-- [Raven vs Sherlock](#raven-vs-sherlock)
-- [Features](#features)
-  - [Core](#core)
+- [Core Features](#core-features)
   - [Scan History & Automation](#scan-history--automation)
   - [Web UI](#web-ui)
   - [Intelligence Pipeline (v0.2.0)](#intelligence-pipeline-v020)
@@ -48,45 +46,7 @@ Modern Rust OSINT for Username Reconnaissance
 - [Community Packaging](#community-packaging)
 - [License](#license)
 
-## Raven vs Sherlock
-
-| Feature | Raven | Sherlock |
-|---|---|---|
-| **Runtime** | Compiled Rust binary — no dependencies | Requires Python 3 + pip packages |
-| **Performance** | Async `buffer_unordered` concurrency (default 200) with per-attempt 15s timeout; HTTP/2 enabled | Sequential-ish with thread pools; no per-attempt hard timeout |
-| **Installation** | `cargo install raven-osint` or single binary download | `pip install sherlock` (requires Python venv) |
-| **Web UI** | Built-in — Axum + SSE real-time streaming + Chart.js + export | None (CLI only) |
-| **Multi-user batch** | CLI + web UI (comma/newline separated textarea) | CLI only (space-separated args) |
-| **Interactive charts** | Doughnut + bar chart auto-rendered after search | None |
-| **Result filtering/sorting** | Status checkboxes, column sort, live text search in web UI | None |
-| **Detail expansion** | Click-to-expand probe URL, HTTP status, response time, error context | None |
-| **Export formats** | CSV, XLSX, JSON, TXT via CLI + web UI endpoints | CSV only |
-| **WAF detection** | Cloudflare, PerimeterX, AWS WAF fingerprinting | Basic Cloudflare detection |
-| **Manifest hosting** | Self-hosted via GitHub raw URL (your infra, not Sherlock's) | Relies on Sherlock's `data.sherlockproject.xyz` |
-| **Profile scraping** | OG tags + CSS selectors per site — extracts name, avatar, bio, location, emails, phones, URLs | None |
-| **API enrichment** | GitHub, Reddit, HackerNews, Dev.to, Keybase APIs (overrides scraped data) | None |
-| **Identity clustering** | Cross-references by shared name, bio similarity, avatar pHash, cross-links, emails, location with 0–100 confidence | None |
-| **Avatar matching** | Perceptual hash (pHash) comparison across platforms | None |
-| **Account graph** | Force-directed graph (DOT + D3.js JSON export) | None |
-| **Timeline** | Digital footprint timeline from account creation dates | None |
-| **Domain intelligence** | DNS (A/AAAA/MX/TXT/NS), WHOIS, homepage scrape, + /about /contact /resume /blog page scraping with email/phone/social extraction | None |
-| **HTML report** | Self-contained offline HTML with statistics, identity, timeline, graph, domain intelligence, profile cards | None |
-| **Scan history + cron** | SQLite persistent storage + cron-based re-scan with change detection | None |
-| **HTTP client** | `reqwest` with `tcp_nodelay`, `pool_max_idle_per_host=100`, connect timeout | `requests` library (blocking) |
-| **Per-attempt timeout** | 15s hard timeout per probe attempt (prevents hanging) | No per-attempt timeout — single request can hang indefinitely |
-| **Config file** | `~/.config/raven/config.toml` (persistent defaults) | CLI flags only |
-| **Retry logic** | Configurable retry count + per-attempt timeout before retry | Limited retry support |
-| **Graceful shutdown** | Ctrl+C cancels in-flight requests cleanly | Abrupt termination on Ctrl+C |
-| **Shell completions** | bash, zsh, fish, powershell, elvish | None |
-| **Docker** | Multi-stage Dockerfile (18 MB slim image) | Community images only |
-| **Site coverage** | 400+ sites (same Sherlock manifest format) | 400+ sites |
-| **Detection methods** | Status code, error message, response URL + WAF | Status code, error message, response URL |
-
-> Raven's site definitions and detection logic are built on top of [Sherlock](https://github.com/sherlock-project/sherlock)'s manifest format. Huge credit and thanks to the Sherlock team for maintaining the excellent site database that makes this tool possible.
-
-## Features
-
-## Core
+## Core Features
 
 - 🔍 **400+ sites** — searches across the largest collection of social networks (powered by Sherlock's manifest format)
 - ⚡ **Async concurrency** — configurable parallel requests (default: 200)
