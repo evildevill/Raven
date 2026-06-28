@@ -73,7 +73,7 @@ Modern Rust OSINT for Username Reconnaissance
 ### From Source
 
 ```bash
-git clone https://github.com/evildevill/RavenOSINT.git
+git clone https://github.com/evildevill/Raven.git
 cd raven
 cargo build --release
 ./target/release/raven --help
@@ -114,7 +114,7 @@ volumes:
 
 ### Pre-built Binary
 
-Download the latest release for your platform from the [releases page](https://github.com/evildevill/RavenOSINT/releases).
+Download the latest release for your platform from the [releases page](https://github.com/evildevill/Raven/releases).
 
 ### Cargo (from crates.io)
 
@@ -514,7 +514,7 @@ Raven is available for multiple platforms. Package maintainers, please update th
 1. Fork the repository
 2. Add packaging scripts to `packaging/<platform>/`
 3. Update this table in a PR
-4. Or open a [feature request](https://github.com/evildevill/RavenOSINT/issues/new?template=feature-request.yml)
+4. Or open a [feature request](https://github.com/evildevill/Raven/issues/new?template=feature-request.yml)
 
 ### Apify Actor
 

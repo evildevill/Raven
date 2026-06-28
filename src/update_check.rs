@@ -3,7 +3,7 @@ use reqwest::Client;
 use serde::Deserialize;
 use tracing::debug;
 
-const VERSION_CHECK_URL: &str = "https://api.github.com/repos/evildevill/RavenOSINT/releases/latest";
+const VERSION_CHECK_URL: &str = "https://api.github.com/repos/evildevill/Raven/releases/latest";
 
 #[derive(Debug, Deserialize)]
 struct Release {

@@ -233,9 +233,9 @@ pub fn expand_wildcard(username: &str) -> Vec<String> {
 }
 
 pub const DEFAULT_MANIFEST_REMOTE_URL: &str =
-    "https://raw.githubusercontent.com/evildevill/RavenOSINT/main/resources/data.json";
+    "https://raw.githubusercontent.com/evildevill/Raven/main/resources/data.json";
 pub const DEFAULT_EXCLUSIONS_URL: &str =
-    "https://raw.githubusercontent.com/evildevill/RavenOSINT/main/resources/false_positive_exclusions.txt";
+    "https://raw.githubusercontent.com/evildevill/Raven/main/resources/false_positive_exclusions.txt";
 
 pub const LOCAL_MANIFEST_PATH: &str = "resources/data.json";
 

@@ -2,7 +2,7 @@
 
 [![Raven Actor](https://apify.com/actor-badge?actor=YOUR_USERNAME/raven)](https://apify.com/YOUR_USERNAME/raven)
 
-This Actor wraps [Raven](https://github.com/evildevill/RavenOSINT) to provide serverless username reconnaissance across social networks in the cloud. It helps you find usernames across multiple social media platforms without installing and running the tool locally.
+This Actor wraps [Raven](https://github.com/evildevill/Raven) to provide serverless username reconnaissance across social networks in the cloud. It helps you find usernames across multiple social media platforms without installing and running the tool locally.
 
 ## Usage
 
