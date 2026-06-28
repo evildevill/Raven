@@ -1,6 +1,6 @@
 # Raven — OSINT Username Search Engine
 
-**Raven** is a high-performance Rust-based OSINT tool for hunting down social media accounts by username across **400+ social networks**. It searches, detects, and reports on username presence with async concurrency, automatic retries, rate limiting, multi-format export, and a real-time web UI.
+**Raven** is a high-performance Rust-based OSINT tool for hunting down social media accounts by username across **400+ social networks**. It searches, detects, scrapes public profile data, correlates identities across platforms, and generates comprehensive investigative reports — all from publicly available information.
 
 ```
 ██████╗  █████╗ ██╗   ██╗███████╗███╗   ██╗
@@ -11,15 +11,50 @@
 ╚═╝  ╚═╝╚═╝  ╚═╝  ╚═══╝  ╚══════╝╚═╝  ╚═══╝
 
 Modern Rust OSINT for Username Reconnaissance
+
+    Author: Waseem Akram (hackerwasii)
 ```
+
+<p align="center">
+  <a href="https://crates.io/crates/raven-osint"><img src="https://img.shields.io/crates/v/raven-osint.svg?style=flat-square&logo=rust" alt="Crates.io"></a>
+  <a href="https://crates.io/crates/raven-osint"><img src="https://img.shields.io/crates/d/raven-osint.svg?style=flat-square" alt="Downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MPL--2.0-blue.svg?style=flat-square" alt="License"></a>
+  <a href="https://github.com/evildevill/Raven/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/evildevill/Raven/ci.yml?style=flat-square&logo=github" alt="CI"></a>
+  <a href="https://rust-lang.org"><img src="https://img.shields.io/badge/rust-1.85%2B-orange.svg?style=flat-square&logo=rust" alt="Rust"></a>
+  <a href="https://hub.docker.com/r/hackerwasii/raven"><img src="https://img.shields.io/docker/pulls/hackerwasii/raven.svg?style=flat-square&logo=docker" alt="Docker Pulls"></a>
+  <a href="https://www.patreon.com/hackerwasii"><img src="https://img.shields.io/badge/donate-patreon-F96854.svg?style=flat-square&logo=patreon" alt="Patreon"></a>
+</p>
+
+> **Legal Notice:** Raven only collects publicly available data. Use responsibly and in accordance with applicable laws and platform terms of service. The authors are not responsible for misuse.
+
+## Table of Contents
+
+- [Raven vs Sherlock](#raven-vs-sherlock)
+- [Features](#features)
+  - [Core](#core)
+  - [Scan History & Automation](#scan-history--automation)
+  - [Web UI](#web-ui)
+  - [Intelligence Pipeline (v0.2.0)](#intelligence-pipeline-v020)
+  - [Domain Intelligence (v0.2.0)](#domain-intelligence-v020)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Web UI](#web-ui-1)
+- [CLI Reference](#cli-reference)
+- [Configuration File](#configuration-file)
+- [Output Formats](#output-formats)
+- [Detection Methods](#detection-methods)
+- [Performance Tips](#performance-tips)
+- [Architecture](#architecture)
+- [Community Packaging](#community-packaging)
+- [License](#license)
 
 ## Raven vs Sherlock
 
 | Feature | Raven | Sherlock |
-|---|---|---|
+|---|---|---|---|
 | **Runtime** | Compiled Rust binary — no dependencies | Requires Python 3 + pip packages |
 | **Performance** | Async `buffer_unordered` concurrency (default 200) with per-attempt 15s timeout; HTTP/2 enabled | Sequential-ish with thread pools; no per-attempt hard timeout |
-| **Installation** | `cargo install raven` or single binary download | `pip install sherlock` (requires Python venv) |
+| **Installation** | `cargo install raven-osint` or single binary download | `pip install sherlock` (requires Python venv) |
 | **Web UI** | Built-in — Axum + SSE real-time streaming + Chart.js + export | None (CLI only) |
 | **Multi-user batch** | CLI + web UI (comma/newline separated textarea) | CLI only (space-separated args) |
 | **Interactive charts** | Doughnut + bar chart auto-rendered after search | None |
@@ -28,6 +63,15 @@ Modern Rust OSINT for Username Reconnaissance
 | **Export formats** | CSV, XLSX, JSON, TXT via CLI + web UI endpoints | CSV only |
 | **WAF detection** | Cloudflare, PerimeterX, AWS WAF fingerprinting | Basic Cloudflare detection |
 | **Manifest hosting** | Self-hosted via GitHub raw URL (your infra, not Sherlock's) | Relies on Sherlock's `data.sherlockproject.xyz` |
+| **Profile scraping** | OG tags + CSS selectors per site — extracts name, avatar, bio, location, emails, phones, URLs | None |
+| **API enrichment** | GitHub, Reddit, HackerNews, Dev.to, Keybase APIs (overrides scraped data) | None |
+| **Identity clustering** | Cross-references by shared name, bio similarity, avatar pHash, cross-links, emails, location with 0–100 confidence | None |
+| **Avatar matching** | Perceptual hash (pHash) comparison across platforms | None |
+| **Account graph** | Force-directed graph (DOT + D3.js JSON export) | None |
+| **Timeline** | Digital footprint timeline from account creation dates | None |
+| **Domain intelligence** | DNS (A/AAAA/MX/TXT/NS), WHOIS, homepage scrape, + /about /contact /resume /blog page scraping with email/phone/social extraction | None |
+| **HTML report** | Self-contained offline HTML with statistics, identity, timeline, graph, domain intelligence, profile cards | None |
+| **Scan history + cron** | SQLite persistent storage + cron-based re-scan with change detection | None |
 | **HTTP client** | `reqwest` with `tcp_nodelay`, `pool_max_idle_per_host=100`, connect timeout | `requests` library (blocking) |
 | **Per-attempt timeout** | 15s hard timeout per probe attempt (prevents hanging) | No per-attempt timeout — single request can hang indefinitely |
 | **Config file** | `~/.config/raven/config.toml` (persistent defaults) | CLI flags only |
@@ -42,6 +86,8 @@ Modern Rust OSINT for Username Reconnaissance
 
 ## Features
 
+## Core
+
 - 🔍 **400+ sites** — searches across the largest collection of social networks (powered by Sherlock's manifest format)
 - ⚡ **Async concurrency** — configurable parallel requests (default: 200)
 - 🎯 **Smart detection** — 3 detection methods: status codes, error messages, response URLs
@@ -55,18 +101,43 @@ Modern Rust OSINT for Username Reconnaissance
 - 🌐 **Proxy support** — HTTP and SOCKS5 proxies
 - 🖥️ **Shell completions** — bash, zsh, fish, powershell, elvish
 - ✋ **Graceful shutdown** — Ctrl+C cancels in-flight requests cleanly
-- 🌐 **Web UI** — real-time browser interface with SSE streaming, interactive charts, detail expansion, batch search, filtering, and sorting
-- 📊 **Interactive charts** — doughnut chart for status distribution + horizontal bar chart for response times (Chart.js)
-- 🔎 **Detail expansion** — click any result to reveal probe URL, HTTP status, response time, error context
-- 👥 **Batch / multi-user search** — search multiple usernames simultaneously (comma or newline separated)
-- 🔍 **Filtering + sorting** — filter by status with checkboxes, sort by name/response time/status, live text search
 - ⚙️ **HTTP/2** — enabled by default for faster connections
 - 🧹 **Clean output** — results stream directly to stdout without ANSI cursor noise
 - 🏷️ **Probe URL tracking** — each result stores the exact URL that was probed for deeper analysis
+
+## Scan History & Automation
+
 - 📜 **Scan history** — every search is saved to a local SQLite database at `~/.local/share/raven/scans.db`
 - 📋 **History browser** — `raven --history` lists past scans; `raven --history <username>` filters by user
 - 🔄 **Cron mode** — `raven --schedule "0 */6 * * *" johndoe` runs periodic re-scans with change detection alerts ("NEW:" on new findings)
 - 🔔 **Change detection** — cron mode compares each scan against the previous one and reports newly found sites
+
+## Web UI
+
+- 🌐 **Real-time browser interface** — Axum + SSE streaming with interactive charts, detail expansion, batch search, filtering, and sorting
+- 📊 **Interactive charts** — doughnut chart for status distribution + horizontal bar chart for response times (Chart.js)
+- 🔎 **Detail expansion** — click any result to reveal probe URL, HTTP status, response time, error context
+- 👥 **Batch / multi-user search** — search multiple usernames simultaneously (comma or newline separated)
+- 🔍 **Filtering + sorting** — filter by status with checkboxes, sort by name/response time/status, live text search
+
+## Intelligence Pipeline (v0.2.0)
+
+- 🧠 **Profile scraping** (`--profile`) — extracts display name, avatar, bio, location, emails, phones, and URLs from claimed profile pages via OG tags and CSS selectors
+- 🔬 **API enrichment** (`--deep`) — overrides scraped data with verified API responses from GitHub, Reddit, HackerNews, Dev.to, and Keybase
+- 🆔 **Identity clustering** — cross-references profiles by shared name, bio similarity, avatar matching, cross-links, co-location, same website, and same email to build a unified identity with 0–100 confidence scoring
+- 👤 **Avatar matching** (`--avatar-match`) — computes perceptual hashes (pHash) of profile avatars and detects identical or near-identical images across platforms
+- 🔗 **Account link graph** (`--graph`) — builds a force-directed graph of interconnected accounts and exports in DOT or D3.js JSON format
+- 📅 **Timeline reconstruction** — reconstructs a digital footprint timeline from account creation dates, showing platforms active per year
+- 🔀 **Username variants** (`--variants`) — generates and searches separator, suffix, and leet-speak variants of the original username
+- 📄 **HTML report** (`--report-html`) — single-file dark-themed self-contained HTML report with statistics, profile cards, identity summary, bio similarity matrix, timeline, domain intelligence, and interactive force-directed graph (no external dependencies, works offline)
+
+## Domain Intelligence (v0.2.0)
+
+- 🌐 **Domain detection** — automatically detects if the username matches a registered domain (e.g. `hackerwasii.com` → resolves) by checking 27 common TLDs
+- 📡 **DNS reconnaissance** — resolves A, AAAA, MX, TXT, and NS records
+- 📋 **WHOIS lookup** — extracts registrar, creation/expiry dates, nameservers, registrant info
+- 🏠 **Homepage scraping** — fetches `<title>` and `<meta description>` from the domain
+- 📄 **Page scraping** — concurrently fetches `/about`, `/contact`, `/resume`, `/cv`, `/blog`, `/projects`, `/portfolio`, `/about-me`, `/bio`, `/links` and extracts emails, phone numbers, social profile links, and text previews from each page
 
 ## Installation
 
@@ -122,7 +193,9 @@ Download the latest release for your platform from the [releases page](https://g
 cargo install raven-osint
 ```
 
-### Package Managers
+> Installs the `raven` binary. v0.2.0 adds the full intelligence pipeline — profile scraping, API enrichment, identity clustering, graph analysis, domain reconnaissance, HTML reports, and more.
+
+<!-- ### Package Managers
 
 | Distribution | Command | Maintainer |
 |---|---|---|
@@ -132,7 +205,7 @@ cargo install raven-osint
 | **Homebrew (macOS/Linux)** | `brew install raven` | Community |
 | **Arch Linux (AUR)** | `yay -S raven` | Community |
 
-> Not yet packaged? Help us add your platform! See [Community Packaging](#community-packaging).
+> Not yet packaged? Help us add your platform! See [Community Packaging](#community-packaging). -->
 
 ## Quick Start
 
@@ -169,6 +242,21 @@ raven --proxy socks5://127.0.0.1:9050 johndoe
 
 # Generate shell completions
 raven --completions bash > /etc/bash_completion.d/raven
+
+# Intelligence pipeline: scrape profiles, enrich via API, generate HTML report
+raven --profile --deep --report-html johndoe
+
+# Username variants scanning
+raven --variants johndoe
+
+# Avatar matching across platforms
+raven --profile --avatar-match johndoe
+
+# Full OSINT: profile scraping + API enrichment + avatar match + graph + HTML report
+raven --profile --deep --avatar-match --graph --report-html johndoe
+
+# Generate email report (no terminal noise)
+raven --profile --deep --report-html johndoe
 ```
 
 ## Web UI
@@ -327,6 +415,18 @@ Response:
 | `--port <PORT>` | `8080` | Port for the web UI server |
 | `--host <HOST>` | `127.0.0.1` | Host for the web UI server |
 
+### Intelligence Options (v0.2.0)
+
+| Flag | Description |
+|------|-------------|
+| `--profile` | Scrape display name, avatar, bio, location, emails, phones, URLs from claimed profile pages |
+| `--deep` | Enrich profiles via GitHub, Reddit, HackerNews, Dev.to, Keybase APIs (overrides scraped data) |
+| `--avatar-match` | Compare profile avatars across platforms using perceptual hashing |
+| `--variants` | Generate and search username variants (separators, suffixes, leet speak) |
+| `--graph` | Build and print an account link graph (DOT format) |
+| `--report-html` | Generate a self-contained HTML report with charts, timeline, graph, identity summary, and domain intelligence |
+| `--report-html-path <PATH>` | Specify output path for the HTML report (default: `<username>_report.html`) |
+
 ### Advanced Options
 
 | Flag | Description |
@@ -372,6 +472,9 @@ ignore_exclusions = false
 | `tor` | bool | Route through Tor |
 | `unique_tor` | bool | New Tor circuit per request |
 | `dump_response` | bool | Dump HTTP responses |
+| `profile` | bool | Enable profile scraping by default |
+| `deep` | bool | Enable API enrichment by default |
+| `avatar_match` | bool | Enable avatar matching by default |
 
 ## Output Formats
 
@@ -527,6 +630,17 @@ apify push
 
 See the [Apify Actor README](./.actor/README.md) for details.
 
+
+## Author
+
+**Waseem Akram** — [@hackerwasii](https://linkedin.com/in/hackerwasii) — [GitHub](https://github.com/evildevill) — [Website](https://hackerwasii.com)
+
+## Funding
+
+Support Raven development on Patreon:
+
+[![Patreon](https://img.shields.io/badge/Patreon-Support-F96854?style=for-the-badge&logo=patreon)](https://www.patreon.com/hackerwasii)
+
 ## License
 
-MIT
+Raven is licensed under the **MPL-2.0**. See [LICENSE](./LICENSE) for details.

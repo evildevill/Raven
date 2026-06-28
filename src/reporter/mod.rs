@@ -2,6 +2,7 @@ mod json;
 mod csv;
 mod xlsx;
 mod txt;
+mod html;
 
 use crate::error::RavenError;
 use crate::types::{QueryResult, SearchResults};
@@ -10,6 +11,7 @@ pub use json::JsonReporter;
 pub use csv::CsvReporter;
 pub use xlsx::XlsxReporter;
 pub use txt::TxtReporter;
+pub use html::HtmlReporter;
 
 pub trait Reporter: Send {
     fn write_search_start(&mut self, username: &str) -> Result<(), RavenError>;

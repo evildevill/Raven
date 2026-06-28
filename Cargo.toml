@@ -1,6 +1,6 @@
 [package]
 name = "raven-osint"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A high-performance Rust OSINT tool for username reconnaissance across hundreds of online platforms."
 license = "MPL-2.0"
@@ -76,6 +76,12 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 
 # Cron expression parsing
 cron = "0.14"
+
+# HTML parsing for profile scraping
+scraper = "0.20"
+
+# Image processing for perceptual hashing
+image = "0.25"
 
 # Browser opening
 webbrowser = "1"

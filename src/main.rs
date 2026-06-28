@@ -1,18 +1,26 @@
+mod avatar;
 mod banner;
 mod cli;
 mod client;
 mod config;
 mod database;
 mod detector;
+mod domain;
 mod engine;
+mod enricher;
 mod error;
 mod filter;
+mod graph;
+mod identity;
 mod manifest;
 mod rate_limiter;
 mod reporter;
+mod scraper;
+mod timeline;
 mod tor_controller;
 mod types;
 mod update_check;
+mod variants;
 mod web;
 
 use std::collections::HashSet;
@@ -29,14 +37,23 @@ use tokio::signal;
 use tracing::{debug, info};
 use tracing_subscriber::EnvFilter;
 
+use avatar::find_avatar_matches;
 use cli::Cli;
 use config::Config;
 use database::ScanDb;
+use domain::{find_domain, DomainInfo};
+use enricher::enrich_profile;
 use error::RavenError;
 use filter::{filter_sites, load_exclusions};
+use graph::{build_account_graph, to_dot};
+use identity::{build_identity_cluster, IdentityCluster};
 use manifest::Manifest;
 use rate_limiter::RateLimiter;
 use reporter::*;
+use scraper::scrape_profile;
+use timeline::build_timeline;
+use types::*;
+use variants::generate_variants;
 
 #[tokio::main]
 async fn main() {
@@ -279,7 +296,198 @@ async fn run() -> Result<(), RavenError> {
         )
         .await?;
 
+        // Handle --variants: generate and search variants, merge results
+        let results = if cli.variants {
+            let variants = generate_variants(username);
+            if !variants.is_empty() {
+                info!("Searching {} username variants", variants.len());
+                let mut all_results = results;
+                for variant in &variants {
+                    if shutdown.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    let var_results = engine::search_username(
+                        variant,
+                        &sites,
+                        &http_client,
+                        concurrency,
+                        retry_count,
+                        rate_limiter.clone(),
+                        cli.dump_response,
+                        cli.unique_tor,
+                        shutdown.clone(),
+                        cli.print_all,
+                        cli.verbose,
+                        cli.browse,
+                    )
+                    .await?;
+                    // Merge variant results into main results
+                    for r in var_results.results {
+                        if !all_results.results.iter().any(|existing| existing.site_name == r.site_name && existing.username == r.username) {
+                            all_results.results.push(r);
+                        }
+                    }
+                    // Update counts
+                    all_results.total_sites = all_results.results.len();
+                    all_results.claimed_count = all_results.results.iter().filter(|r| r.status == QueryStatus::Claimed).count();
+                    all_results.available_count = all_results.results.iter().filter(|r| r.status == QueryStatus::Available).count();
+                    all_results.unknown_count = all_results.results.iter().filter(|r| r.status == QueryStatus::Unknown).count();
+                    all_results.illegal_count = all_results.results.iter().filter(|r| r.status == QueryStatus::Illegal).count();
+                    all_results.waf_count = all_results.results.iter().filter(|r| r.status == QueryStatus::Waf).count();
+                }
+                all_results
+            } else {
+                results
+            }
+        } else {
+            results
+        };
+
         write_reports(&cli, username, &results)?;
+
+        // Intelligence pipeline
+        let mut claimed_profiles: Vec<ClaimedProfile>;
+        if cli.profile || cli.deep || cli.avatar_match || cli.graph || cli.report_html {
+            // Collect claimed results into ClaimedProfile list
+            let claimed_results: Vec<&types::QueryResult> = results.results.iter()
+                .filter(|r| r.status == QueryStatus::Claimed)
+                .collect();
+
+            // --- Live: Scraping profiles ---
+            if cli.profile && !claimed_results.is_empty() {
+                eprint!("  {} Scraping profiles from {} sites…", "●".cyan(), claimed_results.len());
+                std::io::Write::flush(&mut std::io::stderr()).ok();
+            }
+
+            let scrape_futures: Vec<_> = claimed_results.iter().map(|result| {
+                let client = http_client.clone();
+                let site = sites.iter().find(|s| s.name == result.site_name).cloned();
+                let url = result.site_url_user.clone();
+                let name = result.site_name.clone();
+                let uname = username.to_string();
+                async move {
+                    let selectors = site.as_ref().and_then(|s| s.scrape.as_ref());
+                    let scraped = if cli.profile {
+                        scrape_profile(&client, &url, selectors).await.unwrap_or_default()
+                    } else {
+                        ProfileDetails::default()
+                    };
+                    ClaimedProfile {
+                        site_name: name,
+                        site_url: url,
+                        username: uname,
+                        details: scraped,
+                        avatar_phash: None,
+                    }
+                }
+            }).collect();
+            claimed_profiles = futures::future::join_all(scrape_futures).await;
+
+            if cli.profile && !claimed_results.is_empty() {
+                eprintln!(" done");
+            }
+
+            // --- Live: API enrichment ---
+            if cli.deep {
+                eprint!("  {} Enriching via API…", "●".cyan());
+                std::io::Write::flush(&mut std::io::stderr()).ok();
+
+                let enrich_futures: Vec<_> = claimed_profiles.iter_mut().map(|p| {
+                    let client = &http_client;
+                    let uname = username.to_string();
+                    let site_name = p.site_name.clone();
+                    async move {
+                        enrich_profile(client, &site_name, &uname, &mut p.details).await;
+                    }
+                }).collect();
+                futures::future::join_all(enrich_futures).await;
+                eprintln!(" done");
+            }
+
+            // --- Live: Domain check ---
+            eprint!("  {} Checking domain registration…", "●".cyan());
+            std::io::Write::flush(&mut std::io::stderr()).ok();
+            let domain_info = find_domain(username, &http_client).await;
+            if let Some(ref di) = domain_info {
+                if di.resolves {
+                    eprintln!(" found {}", di.domain.white().bold());
+                } else {
+                    eprintln!(" none");
+                }
+            } else {
+                eprintln!(" none");
+            }
+
+            // Avatar matching
+            if cli.avatar_match {
+                find_avatar_matches(&http_client, &mut claimed_profiles).await;
+            }
+
+            // Build identity cluster and timeline
+            let cluster = if !claimed_profiles.is_empty() {
+                Some(build_identity_cluster(claimed_profiles.clone()))
+            } else {
+                None
+            };
+
+            let timeline = if !claimed_profiles.is_empty() {
+                Some(build_timeline(&claimed_profiles))
+            } else {
+                None
+            };
+
+            // Print terminal investigative report
+            if cli.verbose || cli.profile || cli.deep || cli.avatar_match {
+                print_investigative_report(
+                    cluster.as_ref(),
+                    timeline.as_ref(),
+                    &claimed_profiles,
+                    username,
+                );
+            }
+
+            // Print domain info in terminal
+            if let Some(ref di) = domain_info {
+                if di.resolves {
+                    print_domain_report(di);
+                }
+            }
+
+            // Graph output
+            if cli.graph && !claimed_profiles.is_empty() {
+                let graph = build_account_graph(&claimed_profiles);
+                println!("{}", to_dot(&graph));
+            }
+
+            // HTML report
+            if cli.report_html {
+                let path = match cli.report_html_path.as_ref() {
+                    Some(p) => PathBuf::from(p),
+                    None => PathBuf::from(format!("{}_report.html", username)),
+                };
+                let mut html_reporter = HtmlReporter::new(path);
+                html_reporter.set_profiles(claimed_profiles.clone());
+                if let Some(ref cl) = cluster {
+                    html_reporter.set_cluster(cl.clone());
+                }
+                if let Some(ref tl) = timeline {
+                    html_reporter.set_timeline(tl.clone());
+                }
+                if cli.graph || claimed_profiles.len() >= 2 {
+                    let g = build_account_graph(&claimed_profiles);
+                    html_reporter.set_graph(g);
+                }
+                if let Some(ref di) = domain_info {
+                    html_reporter.set_domain_info(di.clone());
+                }
+                html_reporter.write_search_start(username)?;
+                for result in &results.results {
+                    html_reporter.write_result(result)?;
+                }
+                html_reporter.write_search_complete(&results)?;
+                html_reporter.finish()?;
+            }
+        }
 
         // Save to scan history database
         if let Ok(db) = ScanDb::open() {
@@ -305,6 +513,181 @@ async fn run() -> Result<(), RavenError> {
     );
 
     Ok(())
+}
+
+fn print_investigative_report(
+    cluster: Option<&IdentityCluster>,
+    timeline: Option<&timeline::ActivityTimeline>,
+    profiles: &[ClaimedProfile],
+    username: &str,
+) {
+    let sep = "═".repeat(62);
+    println!("\n  {sep}");
+    println!("  {}  ── {}", "OSINT REPORT".white().bold(), username.white().bold());
+    println!("  {sep}");
+
+    if let Some(cl) = cluster {
+        let name = cl.inferred_name.as_deref().unwrap_or("Unknown");
+        let loc = cl.inferred_location.as_deref().unwrap_or("Unknown");
+        let emails = if cl.emails_found.is_empty() {
+            "—".to_string()
+        } else {
+            cl.emails_found.join(", ")
+        };
+        let phones = if cl.phones_found.is_empty() {
+            "—".to_string()
+        } else {
+            cl.phones_found.join(", ")
+        };
+
+        let confidence = cl.confidence as u32;
+        let bar_len: usize = 20;
+        let filled = ((confidence as f32 / 100.0) * bar_len as f32).round() as usize;
+        let bar = format!("{}{}", "▓".repeat(filled).green(), "░".repeat(bar_len.saturating_sub(filled)));
+
+        println!("\n  {}  {}", "IDENTITY".cyan().bold(), "─".repeat(50));
+        println!("  ├─ {}  {}  (seen on {}/{} platforms)", "Inferred Name:".dimmed(), name.white().bold(), cl.accounts.len(), profiles.len().max(1));
+        println!("  ├─ {}  {}", "Inferred Location:".dimmed(), loc);
+        println!("  ├─ {}  {}", "Emails:".dimmed(), emails);
+        println!("  ├─ {}  {}", "Phones:".dimmed(), phones);
+
+        if let Some(ref tl) = timeline {
+            if let Some(footprint) = tl.digital_footprint_years {
+                let earliest = tl.earliest_account.as_ref()
+                    .map(|e| format!("({})", e.date))
+                    .unwrap_or_default();
+                println!("  └─ {}  {} years {}", "Digital Footprint:".dimmed(), footprint, earliest);
+            }
+        }
+
+        println!("\n  {}  {} / 100  [{}] {}",
+            "CONFIDENCE SCORE:".cyan().bold(),
+            confidence.to_string().white().bold(),
+            bar,
+            if confidence >= 80 { "HIGH".green().bold() }
+            else if confidence >= 60 { "MEDIUM".yellow().bold() }
+            else if confidence >= 40 { "LOW".yellow().bold() }
+            else { "VERY LOW".red().bold() }
+        );
+
+        if !cl.shared_signals.is_empty() {
+            println!("\n  {}  {}", "SIGNALS DETECTED".cyan().bold(), "─".repeat(46));
+            for signal in &cl.shared_signals {
+                match signal {
+                    identity::Signal::SameName(name) => {
+                        println!("  ├─ {} {}", "Same name:".dimmed(), name.white());
+                    }
+                    identity::Signal::SameAvatar { site_a, site_b, hash_distance } => {
+                        println!("  ├─ {}  {} ↔ {}  (distance: {})", "Same avatar:".dimmed(), site_a.cyan(), site_b.cyan(), hash_distance);
+                    }
+                    identity::Signal::CrossLinked { from_site, to_url } => {
+                        println!("  ├─ {}  {} → {}", "Cross-link:".dimmed(), from_site.cyan(), to_url.dimmed());
+                    }
+                    identity::Signal::SameLocation(loc) => {
+                        println!("  ├─ {}  {}", "Same location:".dimmed(), loc.white());
+                    }
+                    identity::Signal::SameWebsite(site) => {
+                        println!("  ├─ {}  {}", "Same website:".dimmed(), site.white());
+                    }
+                    identity::Signal::SameEmail(email) => {
+                        println!("  ├─ {}  {}", "Same email:".dimmed(), email.white());
+                    }
+                    identity::Signal::SameBio { similarity } => {
+                        println!("  ├─ {}  {:.0}%", "Bio similarity:".dimmed(), similarity * 100.0);
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(ref tl) = timeline {
+        println!("\n  {}  {}", "TIMELINE".cyan().bold(), "─".repeat(52));
+        for (year, platforms) in &tl.platforms_by_year {
+            println!("  ├─ {}  {}", year.white().bold(), platforms.join(", "));
+        }
+        if let Some(footprint) = tl.digital_footprint_years {
+            println!("  └─ {}  {} years", "Digital footprint:".dimmed(), footprint);
+        }
+    }
+
+    if !profiles.is_empty() && cluster.is_none() {
+        println!("\n  {}  {}", "PROFILES".cyan().bold(), "─".repeat(52));
+        for p in profiles {
+            let name = p.details.display_name.as_deref().unwrap_or("?");
+            let bio = p.details.bio.as_deref().unwrap_or("");
+            println!("  ├─ {}  {}  ({})", p.site_name.cyan(), name, p.site_url.dimmed());
+            if !bio.is_empty() {
+                println!("  │   Bio: {}", bio.dimmed());
+            }
+        }
+    }
+
+    println!("  {sep}\n");
+}
+
+fn print_domain_report(info: &DomainInfo) {
+    let sep = "═".repeat(62);
+    println!("\n  {sep}");
+    println!("  {}  ── {}", "DOMAIN".cyan().bold(), info.domain.white().bold());
+    println!("  {sep}");
+
+    if !info.a_records.is_empty() {
+        println!("  ├─ {}  {}", "A Records:".dimmed(), info.a_records.join(", "));
+    }
+    if !info.aaaa_records.is_empty() {
+        println!("  ├─ {}  {}", "AAAA Records:".dimmed(), info.aaaa_records.join(", "));
+    }
+    if !info.mx_records.is_empty() {
+        println!("  ├─ {}  {}", "MX Records:".dimmed(), info.mx_records.join(", "));
+    }
+    if !info.txt_records.is_empty() {
+        println!("  ├─ {}  {}", "TXT Records:".dimmed(), info.txt_records.join(", "));
+    }
+    if !info.ns_records.is_empty() {
+        println!("  ├─ {}  {}", "NS Records:".dimmed(), info.ns_records.join(", "));
+    }
+    if let Some(ref title) = info.homepage_title {
+        println!("  ├─ {}  {}", "Homepage Title:".dimmed(), title.white());
+    }
+    if let Some(ref desc) = info.homepage_description {
+        let truncated: String = desc.chars().take(120).collect();
+        println!("  ├─ {}  {}", "Description:".dimmed(), truncated.dimmed());
+    }
+    if let Some(ref whois) = info.whois {
+        println!("  ├─ {}", "WHOIS:".dimmed());
+        for line in whois.lines() {
+            println!("  │   {line}");
+        }
+    }
+    if let Some(ref err) = info.error {
+        println!("  └─ {}  {}", "Error:".dimmed(), err.red());
+    }
+
+    // Domain pages
+    if !info.pages.pages.is_empty() {
+        println!("  ├─ {}", "PAGES SCRAPED:".dimmed());
+        for page in &info.pages.pages {
+            let title = page.title.as_deref().unwrap_or("?");
+            let emails = if page.emails.is_empty() { String::new() } else {
+                format!("  \u{2514} emails: {}", page.emails.join(", "))
+            };
+            let social = if page.social_links.is_empty() { String::new() } else {
+                let first_few: Vec<&str> = page.social_links.iter().take(3).map(|s| {
+                    s.split(':').next().unwrap_or(s)
+                }).collect();
+                format!("  \u{2514} social: {}", first_few.join(", "))
+            };
+            println!("  \u{2502}   {}  {}", page.path.cyan(), title.white().bold());
+            if !emails.is_empty() {
+                println!("  \u{2502}   {emails}");
+            }
+            if !social.is_empty() {
+                println!("  \u{2502}   {social}");
+            }
+        }
+    }
+
+    println!("  {sep}\n");
 }
 
 fn print_performance_summary(results: &[types::SearchResults], total_time_ms: u64) {

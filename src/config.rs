@@ -16,6 +16,9 @@ pub struct Config {
     pub tor: Option<bool>,
     pub unique_tor: Option<bool>,
     pub dump_response: Option<bool>,
+    pub profile: Option<bool>,
+    pub deep: Option<bool>,
+    pub avatar_match: Option<bool>,
 }
 
 impl Config {

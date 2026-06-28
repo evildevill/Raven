@@ -248,6 +248,48 @@ pub struct Cli {
         help = "Show past scan history. Optionally filter by username: --history <username>"
     )]
     pub history: Option<String>,
+
+    #[arg(
+        long = "profile",
+        help = "Enable profile scraping on claimed accounts (OG tags + CSS selectors)"
+    )]
+    pub profile: bool,
+
+    #[arg(
+        long = "deep",
+        help = "Enable API enrichment (GitHub, Reddit, HackerNews, Dev.to, Keybase)"
+    )]
+    pub deep: bool,
+
+    #[arg(
+        long = "avatar-match",
+        help = "Download avatars and compare via perceptual hashing (pHash)"
+    )]
+    pub avatar_match: bool,
+
+    #[arg(
+        long = "variants",
+        help = "Auto-scan username variations (separators, suffixes, leet speak, etc.)"
+    )]
+    pub variants: bool,
+
+    #[arg(
+        long = "graph",
+        help = "Build and export account link graph (DOT format to stdout)"
+    )]
+    pub graph: bool,
+
+    #[arg(
+        long = "report-html",
+        help = "Generate full HTML investigative report (auto-named based on username)"
+    )]
+    pub report_html: bool,
+
+    #[arg(
+        long = "report-html-path",
+        help = "Path for the HTML report (requires --report-html)"
+    )]
+    pub report_html_path: Option<String>,
 }
 
 impl Cli {
@@ -292,6 +334,15 @@ impl Cli {
         }
         if !cli.dump_response {
             cli.dump_response = config.dump_response.unwrap_or(false);
+        }
+        if !cli.profile {
+            cli.profile = config.profile.unwrap_or(false);
+        }
+        if !cli.deep {
+            cli.deep = config.deep.unwrap_or(false);
+        }
+        if !cli.avatar_match {
+            cli.avatar_match = config.avatar_match.unwrap_or(false);
         }
 
         debug!("CLI after config merge: {cli:#?}");

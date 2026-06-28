@@ -134,6 +134,7 @@ mod tests {
             error_codes: vec![],
             error_url: None,
             tags: tags.into_iter().map(|s| s.to_string()).collect(),
+            scrape: None,
         }
     }
 

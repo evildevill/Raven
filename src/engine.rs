@@ -259,6 +259,7 @@ pub enum SearchUpdate {
     Result(QueryResult),
     Progress { completed: usize, total: usize },
     Complete { total: usize, claimed: usize, available: usize, unknown: usize, illegal: usize, waf: usize },
+    Intelligence { confidence: f32, profile_count: usize, graph_json: String, timeline_json: String, domain_json: String },
     Error(String),
 }
 

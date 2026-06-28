@@ -65,6 +65,15 @@ struct SearchParams {
     tag: Option<String>,
     #[serde(default)]
     ignore_exclusions: bool,
+    #[serde(default)]
+    profile: bool,
+    #[serde(default)]
+    deep: bool,
+    #[serde(default)]
+    avatar_match: bool,
+    #[serde(default)]
+    #[allow(dead_code)]
+    variants: bool,
 }
 
 fn default_concurrency() -> usize { 200 }
@@ -243,6 +252,21 @@ async fn run_search(
         .await;
     }
 
+    // Intelligence pipeline (post-processing)
+    if (params.profile || params.deep || params.avatar_match) && !shutdown.load(Ordering::Relaxed) {
+        if let Some(_username) = usernames.first() {
+            // Full web intelligence requires collecting results first
+            // For now, send a placeholder to indicate intelligence is available
+            tx.send(SearchUpdate::Intelligence {
+                confidence: 0.0,
+                profile_count: 0,
+                graph_json: String::new(),
+                timeline_json: String::new(),
+                domain_json: String::new(),
+            }).ok();
+        }
+    }
+
     Ok(())
 }
 
@@ -275,6 +299,16 @@ async fn stream_handler(
                     "unknown": unknown, "illegal": illegal, "waf": waf
                 });
                 Some(Ok(Event::default().event("complete").data(data.to_string())))
+            }
+            Ok(SearchUpdate::Intelligence { confidence, profile_count, graph_json, timeline_json, domain_json }) => {
+                let data = serde_json::json!({
+                    "confidence": confidence,
+                    "profile_count": profile_count,
+                    "graph_json": graph_json,
+                    "timeline_json": timeline_json,
+                    "domain_json": domain_json,
+                });
+                Some(Ok(Event::default().event("intelligence").data(data.to_string())))
             }
             Ok(SearchUpdate::Error(e)) => {
                 Some(Ok(Event::default().event("error").data(e)))

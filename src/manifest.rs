@@ -239,6 +239,7 @@ fn process_raw_site(name: &str, raw: &RawSiteInfo) -> Result<SiteInfo, RavenErro
         error_codes,
         error_url: raw.error_url.clone(),
         tags,
+        scrape: raw.scrape.clone(),
     })
 }
 

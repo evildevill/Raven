@@ -19,3 +19,5 @@ codex
 
 # Rust
 **/*.rs.bk
+
+*.html

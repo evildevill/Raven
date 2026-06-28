@@ -243,11 +243,11 @@ fn classify_network_error(err: &reqwest::Error) -> String {
 mod tests {
     use super::*;
 
-    fn msg_site(error_msgs: Vec<&str>) -> SiteInfo {
+    fn make_site(name: &str, url: &str, error_types: Vec<ErrorType>, error_msgs: Vec<String>, error_codes: Vec<i64>, error_url: Option<String>) -> SiteInfo {
         SiteInfo {
-            name: "Msg".to_string(),
-            url: "https://msg.com/{}".to_string(),
-            url_main: "https://msg.com".to_string(),
+            name: name.to_string(),
+            url: url.to_string(),
+            url_main: format!("https://{}", url.split('/').next().unwrap_or("")),
             url_probe: None,
             username_claimed: "u".to_string(),
             regex_check: None,
@@ -255,52 +255,46 @@ mod tests {
             headers: None,
             request_method: None,
             request_payload: None,
-            error_types: vec![ErrorType::Message],
-            error_msgs: error_msgs.into_iter().map(|s| s.to_string()).collect(),
-            error_codes: vec![],
-            error_url: None,
+            error_types,
+            error_msgs,
+            error_codes,
+            error_url,
             tags: vec![],
+            scrape: None,
         }
+    }
+
+    fn msg_site(error_msgs: Vec<&str>) -> SiteInfo {
+        make_site(
+            "Msg",
+            "https://msg.com/{}",
+            vec![ErrorType::Message],
+            error_msgs.into_iter().map(|s| s.to_string()).collect(),
+            vec![],
+            None,
+        )
     }
 
     fn status_site(error_codes: Vec<i64>) -> SiteInfo {
-        SiteInfo {
-            name: "Status".to_string(),
-            url: "https://status.com/{}".to_string(),
-            url_main: "https://status.com".to_string(),
-            url_probe: None,
-            username_claimed: "u".to_string(),
-            regex_check: None,
-            is_nsfw: false,
-            headers: None,
-            request_method: None,
-            request_payload: None,
-            error_types: vec![ErrorType::StatusCode],
-            error_msgs: vec![],
+        make_site(
+            "Status",
+            "https://status.com/{}",
+            vec![ErrorType::StatusCode],
+            vec![],
             error_codes,
-            error_url: None,
-            tags: vec![],
-        }
+            None,
+        )
     }
 
     fn redirect_site(error_url: &str) -> SiteInfo {
-        SiteInfo {
-            name: "Redir".to_string(),
-            url: "https://redir.com/{}".to_string(),
-            url_main: "https://redir.com".to_string(),
-            url_probe: None,
-            username_claimed: "u".to_string(),
-            regex_check: None,
-            is_nsfw: false,
-            headers: None,
-            request_method: None,
-            request_payload: None,
-            error_types: vec![ErrorType::ResponseUrl],
-            error_msgs: vec![],
-            error_codes: vec![],
-            error_url: Some(error_url.to_string()),
-            tags: vec![],
-        }
+        make_site(
+            "Redir",
+            "https://redir.com/{}",
+            vec![ErrorType::ResponseUrl],
+            vec![],
+            vec![],
+            Some(error_url.to_string()),
+        )
     }
 
     #[test]

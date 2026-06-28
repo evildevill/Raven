@@ -109,6 +109,21 @@ pub struct RawSiteInfo {
     #[serde(rename = "__comment__")]
     pub comment: Option<String>,
     pub tags: Option<Vec<String>>,
+    #[serde(default)]
+    pub scrape: Option<ScrapeConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ScrapeConfig {
+    pub display_name: Option<String>,
+    pub avatar: Option<String>,
+    pub bio: Option<String>,
+    pub location: Option<String>,
+    pub website: Option<String>,
+    pub followers: Option<String>,
+    pub following: Option<String>,
+    pub joined_date: Option<String>,
+    pub post_count: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -129,6 +144,7 @@ pub struct SiteInfo {
     pub error_codes: Vec<i64>,
     pub error_url: Option<String>,
     pub tags: Vec<String>,
+    pub scrape: Option<ScrapeConfig>,
 }
 
 impl SiteInfo {
@@ -201,6 +217,33 @@ impl SearchResults {
             results,
         }
     }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ProfileDetails {
+    pub display_name: Option<String>,
+    pub avatar_url: Option<String>,
+    pub bio: Option<String>,
+    pub location: Option<String>,
+    pub website: Option<String>,
+    pub followers: Option<String>,
+    pub following: Option<String>,
+    pub joined_date: Option<String>,
+    pub post_count: Option<String>,
+    pub verified: Option<bool>,
+    pub emails: Vec<String>,
+    pub phone_numbers: Vec<String>,
+    pub linked_urls: Vec<String>,
+    pub extra: std::collections::HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaimedProfile {
+    pub site_name: String,
+    pub site_url: String,
+    pub username: String,
+    pub details: ProfileDetails,
+    pub avatar_phash: Option<u64>,
 }
 
 #[allow(dead_code)]
@@ -312,6 +355,7 @@ mod tests {
             error_codes: vec![404],
             error_url: None,
             tags: vec![],
+            scrape: None,
         };
         assert_eq!(site.url_for_username("joe"), "https://t.com/joe");
         assert_eq!(site.probe_url_for_username("joe"), "https://t.com/joe");
@@ -337,6 +381,7 @@ mod tests {
                 error_codes: vec![404],
                 error_url: None,
                 tags: vec![],
+                scrape: None,
             }
         };
         assert_eq!(site.probe_url_for_username("joe"), "https://api.t.com/joe");
@@ -360,6 +405,7 @@ mod tests {
             error_codes: vec![404],
             error_url: None,
             tags: vec![],
+            scrape: None,
         };
         assert!(site.is_username_valid("anything!!"));
     }
@@ -385,6 +431,7 @@ mod tests {
                 error_codes: vec![404],
                 error_url: None,
                 tags: vec![],
+                scrape: None,
             }
         };
         assert!(site.is_username_valid("normal_user"));
